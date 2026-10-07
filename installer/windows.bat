@@ -1,97 +1,45 @@
 @ECHO OFF
+SETLOCAL
 
-SET PLUGIN_NAME=ScreamLite
-SET DIST_DIR=%0\..\..\dist
+SET "SCRIPT_DIR=%~dp0"
+SET "ROOT_DIR=%SCRIPT_DIR%.."
+SET "BUILD_DIR=%ROOT_DIR%\build"
+SET "DIST_DIR=%ROOT_DIR%\dist"
+SET "PLUGIN_NAME=ScreamLite"
 
-IF NOT EXIST %DIST_DIR% (
-    CALL mkdir %DIST_DIR%
+IF NOT EXIST "%DIST_DIR%" mkdir "%DIST_DIR%"
+
+SET "VERSION="
+FOR /F "tokens=1,2" %%a IN ('findstr /R /C:"^[ ]*VERSION [0-9]" "%ROOT_DIR%\CMakeLists.txt"') DO (
+    IF NOT DEFINED VERSION SET "VERSION=%%b"
 )
 
-ECHO Finding version
-SET VERSION=0.0.0
-FOR /f "tokens=1,2" %%a IN ('type %0\..\..\CMakeLists.txt') DO (
-    IF "x%%a"=="xVERSION" (
-        IF %VERSION% == 0.0.0 (
-            SET VERSION=%%b
-        )
-    )
-)
-IF %VERSION% == 0.0.0 (
-    ECHO Failed to find Version
-    EXIT /B
+IF NOT DEFINED VERSION (
+    ECHO Failed to determine version from CMakeLists.txt
+    EXIT /B 1
 )
 
-ECHO Building version %VERSION%
+ECHO Building Scream Lite %VERSION%
 
-IF EXIST %0\..\..\build (
-    ECHO Removing old build folder
-    RMDIR /S /Q %0\..\..\build
-)
-ECHO Creating new build folder
-CALL mkdir %0\..\..\build
+CALL "%ROOT_DIR%\shaders.bat"
+IF %ERRORLEVEL% NEQ 0 EXIT /B %ERRORLEVEL%
 
-@REM Be sure to set your favourite compiler as en environment variable. `CC` for C, `CXX` for C++. Cmake will default to this
-@REM https://cmake.org/cmake/help/book/mastering-cmake/chapter/Getting%20Started.html#specifying-the-compiler-to-cmake
-ECHO Configuring CMake
-CALL cmake --no-warn-unused-cli^
-           -DCMAKE_BUILD_TYPE:STRING=Release^
-           -S%0\..\..\^
-           -B%0\..\..\build^
-           -G Ninja
+IF EXIST "%BUILD_DIR%" RMDIR /S /Q "%BUILD_DIR%"
+mkdir "%BUILD_DIR%"
 
-IF %ERRORLEVEL% NEQ 0 (
-    ECHO CMake failed to configure with exit code %ERRORLEVEL%
-    EXIT /B
-)
+CALL cmake --no-warn-unused-cli ^
+    -DCMAKE_BUILD_TYPE:STRING=Release ^
+    -DSCREAM_LITE_BUILD_STANDALONE=OFF ^
+    -S"%ROOT_DIR%" ^
+    -B"%BUILD_DIR%" ^
+    -G Ninja
+IF %ERRORLEVEL% NEQ 0 EXIT /B %ERRORLEVEL%
 
-ECHO Building release binaries
-CALL cmake --build %0\..\..\build --config Release --target all --
+CALL cmake --build "%BUILD_DIR%" --config Release --target all --
+IF %ERRORLEVEL% NEQ 0 EXIT /B %ERRORLEVEL%
 
-IF %ERRORLEVEL% NEQ 0 (
-    ECHO Release build failed with exit code %ERRORLEVEL%
-    EXIT /B
-)
+CALL ISCC.exe /DMyVersion=%VERSION% "%SCRIPT_DIR%_windows.iss"
+IF %ERRORLEVEL% NEQ 0 EXIT /B %ERRORLEVEL%
 
-@REM When we have tests, they should run here...
-@REM ECHO Running tests...
-@REM CALL %0\..\..\build\Release\tests.exe
-@REM IF %ERRORLEVEL% NEQ 0 (
-@REM     ECHO Tests failed with exit code %ERRORLEVEL%
-@REM     EXIT /B
-@REM )
-
-ECHO Backing up .pdb files
-IF NOT EXIST %0\..\..\build\Release\%PLUGIN_NAME%_plugin.pdb (
-    ECHO Missing %PLUGIN_NAME%_plugin.pdb
-    EXIT /B
-)
-@REM Windows will prompt to ask you whether the destination is a directory or file
-@REM Echo is used to pipe the answer to the prompt
-ECHO F | XCOPY %0\..\..\build\Release\%PLUGIN_NAME%_plugin.pdb %DIST_DIR%\%PLUGIN_NAME%_v%VERSION%_plugin.pdb /Y
-
-@REM To my knowledge, call strip here does nothing when building with clang.
-@REM Maybe older versions of clang on windows needed symbol stripping,
-@REM but Clang 16 seems to follow MSVC conventions of keeping all the symbols in a .pdb file
-@REM Since this is an open source plugin, none of this matters...
-@REM CALL llvm-strip -x %0\..\..\build\Release\%PLUGIN_NAME%.vst3\Contents\x86_64-win\%PLUGIN_NAME%.vst3
-
-ECHO Building installer
-CALL ISCC.exe /DMyVersion=%VERSION% %0\..\_windows.iss
-
-IF %ERRORLEVEL% NEQ 0 (
-    ECHO Inno Setup failed to build installer with exit code %ERRORLEVEL%
-    EXIT /B
-)
-
-ECHO Zipping installer
-@REM Clear everything from the archive. A new archive will be created if it doesn't exist
-CALL 7z d %DIST_DIR%\%PLUGIN_NAME%_win.zip * -r
-@REM Add new installer to archive
-CALL 7z a %DIST_DIR%\%PLUGIN_NAME%_win.zip %DIST_DIR%\%PLUGIN_NAME%_v%VERSION%.exe
-
-IF %ERRORLEVEL% NEQ 0 (
-    ECHO 7z failed to zip installer with exit code %ERRORLEVEL%
-    EXIT /B
-)
-
-ECHO Build completed successfully
+ECHO Installer: %DIST_DIR%\%PLUGIN_NAME%_v%VERSION%.exe
+ENDLOCAL

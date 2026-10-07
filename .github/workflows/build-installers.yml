@@ -1,0 +1,93 @@
+name: Build installers
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: macOS installer
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Ensure Ninja is available
+        run: command -v ninja >/dev/null || brew install ninja
+
+      - name: Install sokol-shdc
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/floooh/sokol-tools-bin.git /tmp/sokol-tools-bin
+          mkdir -p /tmp/sokol-bin
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            cp /tmp/sokol-tools-bin/bin/osx_arm64/sokol-shdc /tmp/sokol-bin/sokol-shdc
+          else
+            cp /tmp/sokol-tools-bin/bin/osx/sokol-shdc /tmp/sokol-bin/sokol-shdc
+          fi
+          chmod +x /tmp/sokol-bin/sokol-shdc
+          echo "/tmp/sokol-bin" >> "$GITHUB_PATH"
+
+      - name: Build installer
+        run: bash installer/macos.sh
+
+      - name: Upload macOS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreamLite-macOS-installer
+          path: dist/ScreamLite_v[0-9]*.pkg
+          if-no-files-found: error
+
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build tools
+        shell: powershell
+        run: |
+          choco install ninja innosetup -y --no-progress
+          $inno = "C:\Program Files (x86)\Inno Setup 6"
+          if (Test-Path $inno) {
+            $inno | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Install sokol-shdc
+        shell: powershell
+        run: |
+          git clone --depth 1 https://github.com/floooh/sokol-tools-bin.git "$env:RUNNER_TEMP\sokol-tools-bin"
+          $bin = "$env:RUNNER_TEMP\sokol-bin"
+          New-Item -ItemType Directory -Force -Path $bin | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\sokol-tools-bin\bin\win32\sokol-shdc.exe" "$bin\sokol-shdc.exe"
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify toolchain
+        shell: powershell
+        run: |
+          clang-cl --version
+          cmake --version
+          ninja --version
+          sokol-shdc --help | Select-Object -First 5
+          Get-Command ISCC.exe | Format-Table -AutoSize
+
+      - name: Build installer
+        shell: cmd
+        env:
+          CC: clang-cl
+        run: installer\windows.bat
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreamLite-Windows-installer
+          path: dist/ScreamLite_v*.exe
+          if-no-files-found: error
