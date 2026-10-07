@@ -409,7 +409,7 @@ void* pw_create_gui(void* _plugin, void* _pw)
 #ifdef NDEBUG
         // Requires installer putting assets in correct folder
         int         len             = xfiles_get_user_directory(path, sizeof(path), XFILES_USER_DIRECTORY_APPDATA);
-        const char* relpath_plugin  = XFILES_DIR_STR "Cure Audio" XFILES_DIR_STR "Scream" XFILES_DIR_STR;
+        const char* relpath_plugin  = XFILES_DIR_STR "Cure Audio" XFILES_DIR_STR "ScreamLite" XFILES_DIR_STR;
         len                        += xfmt(path, len, "%s", relpath_plugin);
 #else
         // Load from assets dir
