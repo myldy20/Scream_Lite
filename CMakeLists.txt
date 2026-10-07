@@ -2,25 +2,26 @@ cmake_minimum_required(VERSION 3.16)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version" FORCE)
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 
-project(Scream
+project(ScreamLite
     VERSION 1.0.12
     DESCRIPTION ""
     HOMEPAGE_URL "https://github.com/Cure-Audio/Scream"
     LANGUAGES C)
 set(COMPANY_NAME "Cure Audio")
+set(PLUGIN_DISPLAY_NAME "Scream Lite")
 
-set(PRODUCT_NAME ${PROJECT_NAME}) # used by info.plist
+set(PRODUCT_NAME "${PLUGIN_DISPLAY_NAME}") # used by info.plist
 set(PRODUCT_COPYRIGHT ${COMPANY_NAME})
-set(AUV2_BUNDLE_ID "com.cureaudio.scream.auv2")
-set(CLAP_BUNDLE_ID "com.cureaudio.scream.clap")
-set(VST3_BUNDLE_ID "com.cureaudio.scream.vst3")
-set(APP_BUNDLE_ID "com.cureaudio.scream.app")
+set(AUV2_BUNDLE_ID "com.myldy20.screamlite.auv2")
+set(CLAP_BUNDLE_ID "com.myldy20.screamlite.clap")
+set(VST3_BUNDLE_ID "com.myldy20.screamlite.vst3")
+set(APP_BUNDLE_ID "com.myldy20.screamlite.app")
 # Full list of AU types & tags here:
 # https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/AudioUnit.html
 # The properties:
 set(MACOSX_BUNDLE_TAGS "<string>Filter</string>") # Predefined tags are: Bass, Delay, Distortion, Drums, Dynamics, Dynamics Processor, Effects, Equalizer, Filter, Format Converter, Guitar, Imaging, MIDI, Mixer, Offline Effect, Output, Panner, Pitch, Reverb, Sampler, Synthesizer, Time Effect, Vocal. But you can use others.
 set(MACOSX_BUNDLE_TYPE "aufx") # "aufx" for Effect, "augn" for Generator, "aumu" for Instrument, "aufm" for Music Effect.
-set(MACOSX_BUNDLE_SUBTYPE "Scrm") # For AU and GarageBand 10.3 compatibility, the first letter must be upper-case, the others lower-case.
+set(MACOSX_BUNDLE_SUBTYPE "Sclt") # For AU and GarageBand 10.3 compatibility, the first letter must be upper-case, the others lower-case.
 set(MACOSX_BUNDLE_MANUFACTURER "Cure") # For AU and GarageBand 10.3 compatibility, the first letter must be upper-case, the others lower-case.
 # Convert version string (1.0.0) > integer (65536)
 math(EXPR MACOSX_BUNDLE_VERSION_INT "${PROJECT_VERSION_MAJOR} << 16 | ${PROJECT_VERSION_MINOR} << 8 | ${PROJECT_VERSION_PATCH}" OUTPUT_FORMAT DECIMAL) # cool trick bro
@@ -107,7 +108,7 @@ endif()
 set(PLUGIN_DEFINITIONS
     CPLUG_COMPANY_NAME="${COMPANY_NAME}"
     CPLUG_COMPANY_EMAIL="contact@cure.audio"
-    CPLUG_PLUGIN_NAME="${PROJECT_NAME}"
+    CPLUG_PLUGIN_NAME="${PLUGIN_DISPLAY_NAME}"
     CPLUG_PLUGIN_URI="${PROJECT_HOMEPAGE_URL}"
     CPLUG_PLUGIN_VERSION="${PROJECT_VERSION}"
     _HAS_EXCEPTIONS=0
