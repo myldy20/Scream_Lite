@@ -368,6 +368,14 @@ void cplug_loadState(void* _p, const void* stateCtx, cplug_readProc readProc)
                 _Static_assert(sizeof(state->lfo_mod_amounts) == sizeof(p->lfo_mod_amounts), "");
                 _Static_assert(ARRLEN(state->lfo_mod_amounts) == ARRLEN(p->lfo_mod_amounts), "");
                 memcpy(p->lfo_mod_amounts, state->lfo_mod_amounts, sizeof(p->lfo_mod_amounts));
+                for (int mod_idx = 0; mod_idx < ARRLEN(p->lfo_mod_amounts); ++mod_idx)
+                {
+                    for (int ch = 0; ch < 2; ++ch)
+                    {
+                        if (!isfinite(p->lfo_mod_amounts[mod_idx].data[ch]))
+                            p->lfo_mod_amounts[mod_idx].data[ch] = 0;
+                    }
+                }
 
                 p->autogain_on         = !!state->autogain_on;
                 p->midi_keytracking_on = !!state->midi_keytracking_on;
