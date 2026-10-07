@@ -1,7 +1,12 @@
-# Scream
-Scream is a free, open source distortion plugin inspired by the iconic 2010 era “Scream” sound, built for modern producers who want aggressive tone, movement, and character in a standalone effect. Designed for drums, basses, synths, and vocals, Scream combines classic inspiration with modern workflow features like built-in modulation, flexible shaping, and broad plugin format support for today’s production environments.
+# Scream Lite
 
-Download: https://cure.audio/scream
+This repository is a lightweight community fork of [Cure Audio Scream](https://github.com/Cure-Audio/Scream). The core Scream DSP, modulation workflow, original attribution and license are preserved.
+
+Lite changes focus on reliability and unnecessary overhead: the built-in update/network stack is removed, several DSP/state-loading bugs are fixed, plugin IDs are unique so this build can coexist with upstream Scream, macOS Release builds no longer carry debug symbols, and the standalone test app is disabled by default.
+
+For the original project and official binaries, use [Cure-Audio/Scream](https://github.com/Cure-Audio/Scream).
+
+Scream is a free, open source distortion plugin inspired by the iconic 2010 era “Scream” sound, built for modern producers who want aggressive tone, movement, and character in a standalone effect. Designed for drums, basses, synths, and vocals, Scream combines classic inspiration with modern workflow features like built-in modulation, flexible shaping, and broad plugin format support for today’s production environments.
 
 This repo continues the work previously made by Speechrezz [here](https://github.com/Speechrezz/Scream-Filter).
 
@@ -107,9 +112,10 @@ Requirements:
 Build:
 
 ```
-git clone https://github.com/Cure-Audio/Scream
-cd Scream
-git submodule update --init
+git clone --recurse-submodules https://github.com/myldy20/Scream_Lite
+cd Scream_Lite
+# only needed if the clone was made without --recurse-submodules
+git submodule update --init --recursive
 #windows
 .\shaders.bat
 #macos
