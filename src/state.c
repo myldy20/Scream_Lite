@@ -117,12 +117,28 @@ static bool state_blob_is_valid(const PluginState* state, size_t state_size)
 
             const size_t npoints = (size_t)h->array_length;
             const size_t offset  = (size_t)h->blob_offset;
-            if (offset > state->blob_length)
+            if (npoints == 0 || offset > state->blob_length)
                 return false;
 
             const size_t bytes_left = state->blob_length - offset;
             if (npoints > bytes_left / sizeof(xvec3f))
                 return false;
+
+            const xvec3f* points = (const xvec3f*)(state->blob + offset);
+            float         last_x = 0;
+            for (size_t point_idx = 0; point_idx < npoints; ++point_idx)
+            {
+                const xvec3f point = points[point_idx];
+                if (!isfinite(point.x) || !isfinite(point.y) || !isfinite(point.skew))
+                    return false;
+                if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1 || point.skew < 0 || point.skew > 1)
+                    return false;
+                if (point_idx == 0 && point.x != 0)
+                    return false;
+                if (point_idx > 0 && point.x < last_x)
+                    return false;
+                last_x = point.x;
+            }
         }
     }
     return true;
