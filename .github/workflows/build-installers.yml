@@ -77,7 +77,7 @@ jobs:
           cmake --version
           ninja --version
           sokol-shdc --help | Select-Object -First 5
-          ISCC.exe /?
+          Get-Command ISCC.exe | Format-Table -AutoSize
 
       - name: Build installer
         shell: cmd
