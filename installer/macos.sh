@@ -5,10 +5,10 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 VERSION=$(cat "${SCRIPT_DIR}/../CMakeLists.txt" | grep VERSION | sed -n 2p | sed -e 's/VERSION//' -e 's/ //g')
 
-PLUGIN_NAME=Scream
+PLUGIN_NAME=ScreamLite
 DIST_DIR="${SCRIPT_DIR}/../dist"
 
-INSTALLER_PATH="${DIST_DIR}/Scream_v${VERSION}.pkg"
+INSTALLER_PATH="${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}.pkg"
 
 # if [ -f $INSTALLER_PATH ]; then
 #     echo "Error: ${INSTALLER_PATH} already exists! Please bump the version number or delete it the old file."
@@ -52,9 +52,9 @@ fi
 # fi
 
 echo "Backing up binaries with debug symbols"
-xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/Scream_v${VERSION}_auv2.dSYM"
-xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/Scream_v${VERSION}_clap.dSYM"
-xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/Scream_v${VERSION}_vst3.dSYM"
+xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}_auv2.dSYM"
+xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}_clap.dSYM"
+xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}_vst3.dSYM"
 
 # If this wasn't open source, I would strip the symbols here
 # echo "Stripping symbols"
@@ -100,25 +100,25 @@ pkgbuild --root "${SCRIPT_DIR}/../build/installer_assets/" \
          --version $VERSION \
          --install-location "/tmp/${PLUGIN_NAME}-installer/${PLUGIN_NAME}" \
          --scripts ${SCRIPT_DIR}/scripts \
-         ${DIST_DIR}/Scream_assets.pkg
+         ${DIST_DIR}/${PLUGIN_NAME}_assets.pkg
 
 pkgbuild --root "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component" \
          --identifier com.CureAudio.${PLUGIN_NAME}.pkg.au \
          --version $VERSION \
          --install-location "/Library/Audio/Plug-Ins/Components/${PLUGIN_NAME}.component" \
-         ${DIST_DIR}/Scream_au.pkg
+         ${DIST_DIR}/${PLUGIN_NAME}_au.pkg
 
 pkgbuild --root "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap" \
          --identifier com.CureAudio.${PLUGIN_NAME}.pkg.clap \
          --version $VERSION \
          --install-location "/Library/Audio/Plug-Ins/CLAP/${PLUGIN_NAME}.clap" \
-         ${DIST_DIR}/Scream_clap.pkg
+         ${DIST_DIR}/${PLUGIN_NAME}_clap.pkg
 
 pkgbuild --root "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3" \
          --identifier com.CureAudio.${PLUGIN_NAME}.pkg.vst3 \
          --version $VERSION \
          --install-location "/Library/Audio/Plug-Ins/VST3/${PLUGIN_NAME}.vst3" \
-         ${DIST_DIR}/Scream_vst3.pkg
+         ${DIST_DIR}/${PLUGIN_NAME}_vst3.pkg
 
 # https://developer.apple.com/library/archive/documentation/DeveloperTools/Reference/DistributionDefinitionRef/Chapters/Distribution_XML_Ref.html
 # https://forum.juce.com/t/vst-installer/16654/15
@@ -150,19 +150,19 @@ cat > ${DIST_DIR}/distribution.xml << XMLEND
     <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.assets" visible="true" start_selected="true" title="Required assets" enabled="false">
         <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.assets"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.assets" version="${VERSION}">Scream_assets.pkg</pkg-ref>
+    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.assets" version="${VERSION}">${PLUGIN_NAME}_assets.pkg</pkg-ref>
     <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.au" visible="true" start_selected="true" title="Audio Unit (v2)">
         <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.au"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.au" version="${VERSION}">Scream_au.pkg</pkg-ref>
+    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.au" version="${VERSION}">${PLUGIN_NAME}_au.pkg</pkg-ref>
     <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.clap" visible="true" start_selected="true" title="CLAP">
         <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.clap"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.clap" version="${VERSION}">Scream_clap.pkg</pkg-ref>
+    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.clap" version="${VERSION}">${PLUGIN_NAME}_clap.pkg</pkg-ref>
     <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3" visible="true" start_selected="true" title="VST3">
         <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3" version="${VERSION}">Scream_vst3.pkg</pkg-ref>
+    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3" version="${VERSION}">${PLUGIN_NAME}_vst3.pkg</pkg-ref>
 </installer-gui-script>
 XMLEND
 
