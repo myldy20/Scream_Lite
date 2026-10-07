@@ -1,214 +1,138 @@
-#!/bin/sh
+#!/bin/bash
 
-# https://stackoverflow.com/a/246128
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
-VERSION=$(cat "${SCRIPT_DIR}/../CMakeLists.txt" | grep VERSION | sed -n 2p | sed -e 's/VERSION//' -e 's/ //g')
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VERSION="$(awk '/^[[:space:]]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+/ { print $2; exit }' "${ROOT_DIR}/CMakeLists.txt")"
 
 PLUGIN_NAME=ScreamLite
-DIST_DIR="${SCRIPT_DIR}/../dist"
-
+DISPLAY_NAME="Scream Lite"
+PACKAGE_ID=com.myldy20.screamlite
+DIST_DIR="${ROOT_DIR}/dist"
 INSTALLER_PATH="${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}.pkg"
 
-# if [ -f $INSTALLER_PATH ]; then
-#     echo "Error: ${INSTALLER_PATH} already exists! Please bump the version number or delete it the old file."
-#     exit 1
-# fi
+if [ -z "${VERSION}" ]; then
+    echo "Failed to determine version from CMakeLists.txt"
+    exit 1
+fi
 
-echo "Building ${INSTALLER_PATH}"
+echo "Building ${DISPLAY_NAME} ${VERSION}"
 
-echo "Removing old build folder"
-rm -rf "${SCRIPT_DIR}/../build"
-echo "Creating new build folder"
-mkdir -p "${SCRIPT_DIR}/../build"
-mkdir -p $DIST_DIR
+cd "${ROOT_DIR}"
+bash ./shaders.sh
 
-echo "Configuring CMake"
+rm -rf "${ROOT_DIR}/build"
+mkdir -p "${ROOT_DIR}/build" "${DIST_DIR}"
+
 cmake --no-warn-unused-cli \
       -DCMAKE_BUILD_TYPE:STRING=Release \
       -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE \
-      -S${SCRIPT_DIR}/../ \
-      -B${SCRIPT_DIR}/../build \
+      -DSCREAM_LITE_BUILD_STANDALONE=OFF \
+      -S"${ROOT_DIR}" \
+      -B"${ROOT_DIR}/build" \
       -G Ninja
 
-if [ $? != 0 ]; then
-    echo "Failed to configure CMake"
-    exit 1
-fi
+cmake --build "${ROOT_DIR}/build" --config Release --target all --
 
-cmake --build "${SCRIPT_DIR}/../build" --config Release --target all --
-if [ $? != 0 ]; then
-    echo "Failed to compile release build"
-    exit 1
-fi
-
-# If/when tests exist, run them here
-# echo "Running tests"
-# ${SCRIPT_DIR}/../build/Release/tests
-# if [ $? != 0 ]
-# then
-#     echo "Failed tests"
-#     exit 1
-# fi
-
-#======================================
-
-echo "Signing"
-
-if [ -n "$DEVELOPER_ID_APPLICATION" ]; then
-    codesign --force -s "${DEVELOPER_ID_APPLICATION}" -v "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap"      --strict --options=runtime --timestamp
-    codesign --force -s "${DEVELOPER_ID_APPLICATION}" -v "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component" --strict --options=runtime --timestamp
-    codesign --force -s "${DEVELOPER_ID_APPLICATION}" -v "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3"      --strict --options=runtime --timestamp
-
-    codesign -dv --verbose=4 "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap"
-    codesign -dv --verbose=4 "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component"
-    codesign -dv --verbose=4 "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3"
+if [ -n "${DEVELOPER_ID_APPLICATION:-}" ]; then
+    codesign --force -s "${DEVELOPER_ID_APPLICATION}" -v "${ROOT_DIR}/build/Release/${PLUGIN_NAME}.clap" --strict --options=runtime --timestamp
+    codesign --force -s "${DEVELOPER_ID_APPLICATION}" -v "${ROOT_DIR}/build/Release/${PLUGIN_NAME}.component" --strict --options=runtime --timestamp
+    codesign --force -s "${DEVELOPER_ID_APPLICATION}" -v "${ROOT_DIR}/build/Release/${PLUGIN_NAME}.vst3" --strict --options=runtime --timestamp
 else
-    echo "WARNING: environment variable \"DEVELOPER_ID_APPLICATION\" not found. Skipping code signing packages..."
+    echo "No Developer ID Application certificate configured; building unsigned plugins."
 fi
 
-#======================================
-
-echo "Building pkgs"
-
-# Note: when installing static files to user directories, you have to first install to /tmp/custom-path
-# then using a postinstall script, copy the files from /tmp/custom-path to the user directory(s) and
-# delete the /tmp/custom-path
-# Sending paths like "~/Desktop" to pkgbuild will cause the installer to create user directories on the users computer
-# with YOUR username. This is embarrasing!
-
-# Your installer WILL fail if execution permissions arent set 
 chmod +x "${SCRIPT_DIR}/scripts/postinstall"
+mkdir -p "${ROOT_DIR}/build/installer_assets"
+cp "${ROOT_DIR}/assets/Tomorrow-SemiBold.ttf" "${ROOT_DIR}/build/installer_assets/"
+cp "${ROOT_DIR}/assets/OFL.txt" "${ROOT_DIR}/build/installer_assets/"
 
-mkdir -p "${SCRIPT_DIR}/../build/installer_assets/"
-cp "${SCRIPT_DIR}/../assets/Tomorrow-SemiBold.ttf" "${SCRIPT_DIR}/../build/installer_assets/"
-cp "${SCRIPT_DIR}/../assets/OFL.txt"               "${SCRIPT_DIR}/../build/installer_assets/"
-
-pkgbuild --root "${SCRIPT_DIR}/../build/installer_assets/" \
-         --identifier "com.CureAudio.${PLUGIN_NAME}.pkg.assets" \
-         --version $VERSION \
+pkgbuild --root "${ROOT_DIR}/build/installer_assets/" \
+         --identifier "${PACKAGE_ID}.pkg.assets" \
+         --version "${VERSION}" \
          --install-location "/tmp/${PLUGIN_NAME}-installer/${PLUGIN_NAME}" \
-         --scripts ${SCRIPT_DIR}/scripts \
-         ${DIST_DIR}/${PLUGIN_NAME}_assets.pkg
+         --scripts "${SCRIPT_DIR}/scripts" \
+         "${DIST_DIR}/${PLUGIN_NAME}_assets.pkg"
 
-pkgbuild --root "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component" \
-         --identifier com.CureAudio.${PLUGIN_NAME}.pkg.au \
-         --version $VERSION \
+pkgbuild --root "${ROOT_DIR}/build/Release/${PLUGIN_NAME}.component" \
+         --identifier "${PACKAGE_ID}.pkg.au" \
+         --version "${VERSION}" \
          --install-location "/Library/Audio/Plug-Ins/Components/${PLUGIN_NAME}.component" \
-         ${DIST_DIR}/${PLUGIN_NAME}_au.pkg
+         "${DIST_DIR}/${PLUGIN_NAME}_au.pkg"
 
-pkgbuild --root "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap" \
-         --identifier com.CureAudio.${PLUGIN_NAME}.pkg.clap \
-         --version $VERSION \
+pkgbuild --root "${ROOT_DIR}/build/Release/${PLUGIN_NAME}.clap" \
+         --identifier "${PACKAGE_ID}.pkg.clap" \
+         --version "${VERSION}" \
          --install-location "/Library/Audio/Plug-Ins/CLAP/${PLUGIN_NAME}.clap" \
-         ${DIST_DIR}/${PLUGIN_NAME}_clap.pkg
+         "${DIST_DIR}/${PLUGIN_NAME}_clap.pkg"
 
-pkgbuild --root "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3" \
-         --identifier com.CureAudio.${PLUGIN_NAME}.pkg.vst3 \
-         --version $VERSION \
+pkgbuild --root "${ROOT_DIR}/build/Release/${PLUGIN_NAME}.vst3" \
+         --identifier "${PACKAGE_ID}.pkg.vst3" \
+         --version "${VERSION}" \
          --install-location "/Library/Audio/Plug-Ins/VST3/${PLUGIN_NAME}.vst3" \
-         ${DIST_DIR}/${PLUGIN_NAME}_vst3.pkg
+         "${DIST_DIR}/${PLUGIN_NAME}_vst3.pkg"
 
-# https://developer.apple.com/library/archive/documentation/DeveloperTools/Reference/DistributionDefinitionRef/Chapters/Distribution_XML_Ref.html
-# https://forum.juce.com/t/vst-installer/16654/15
-# https://github.com/surge-synthesizer/surge/blob/main/scripts/installer_mac/make_installer.sh
-# Background images appear to be around 1280x832 - 1280x840.
-# Set scaling="proportional" to resize the image to always fit
-# http://shanekirk.com/2013/10/creating-flat-packages-in-osx/>
-# https://ofek.dev/words/guides/2025-05-13-distributing-command-line-tools-for-macos/
+cp "${ROOT_DIR}/LICENSE" "${SCRIPT_DIR}/LICENSE"
 
-cp "${SCRIPT_DIR}/../LICENSE" "${SCRIPT_DIR}"
-
-cat > ${DIST_DIR}/distribution.xml << XMLEND
+cat > "${DIST_DIR}/distribution.xml" << XMLEND
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="1">
-    <title>${PLUGIN_NAME} ${VERSION}</title>
+    <title>${DISPLAY_NAME} ${VERSION}</title>
     <license file="LICENSE"/>
     <background file="_macOS_installer_background.png" mime-type="image/png" scaling="proportional" />
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.assets"/>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.au"/>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.clap"/>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3"/>
+    <pkg-ref id="${PACKAGE_ID}.pkg.assets"/>
+    <pkg-ref id="${PACKAGE_ID}.pkg.au"/>
+    <pkg-ref id="${PACKAGE_ID}.pkg.clap"/>
+    <pkg-ref id="${PACKAGE_ID}.pkg.vst3"/>
     <options require-scripts="false" customize="always" />
     <choices-outline>
-        <line choice="com.CureAudio.${PLUGIN_NAME}.pkg.assets"/>
-        <line choice="com.CureAudio.${PLUGIN_NAME}.pkg.au"/>
-        <line choice="com.CureAudio.${PLUGIN_NAME}.pkg.clap"/>
-        <line choice="com.CureAudio.${PLUGIN_NAME}.pkg.vst3"/>
+        <line choice="${PACKAGE_ID}.pkg.assets"/>
+        <line choice="${PACKAGE_ID}.pkg.au"/>
+        <line choice="${PACKAGE_ID}.pkg.clap"/>
+        <line choice="${PACKAGE_ID}.pkg.vst3"/>
     </choices-outline>
-    <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.assets" visible="true" start_selected="true" title="Required assets" enabled="false">
-        <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.assets"/>
+    <choice id="${PACKAGE_ID}.pkg.assets" visible="true" start_selected="true" title="Required assets" enabled="false">
+        <pkg-ref id="${PACKAGE_ID}.pkg.assets"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.assets" version="${VERSION}">${PLUGIN_NAME}_assets.pkg</pkg-ref>
-    <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.au" visible="true" start_selected="true" title="Audio Unit (v2)">
-        <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.au"/>
+    <pkg-ref id="${PACKAGE_ID}.pkg.assets" version="${VERSION}">${PLUGIN_NAME}_assets.pkg</pkg-ref>
+    <choice id="${PACKAGE_ID}.pkg.au" visible="true" start_selected="true" title="Audio Unit (v2)">
+        <pkg-ref id="${PACKAGE_ID}.pkg.au"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.au" version="${VERSION}">${PLUGIN_NAME}_au.pkg</pkg-ref>
-    <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.clap" visible="true" start_selected="true" title="CLAP">
-        <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.clap"/>
+    <pkg-ref id="${PACKAGE_ID}.pkg.au" version="${VERSION}">${PLUGIN_NAME}_au.pkg</pkg-ref>
+    <choice id="${PACKAGE_ID}.pkg.clap" visible="true" start_selected="true" title="CLAP">
+        <pkg-ref id="${PACKAGE_ID}.pkg.clap"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.clap" version="${VERSION}">${PLUGIN_NAME}_clap.pkg</pkg-ref>
-    <choice id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3" visible="true" start_selected="true" title="VST3">
-        <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3"/>
+    <pkg-ref id="${PACKAGE_ID}.pkg.clap" version="${VERSION}">${PLUGIN_NAME}_clap.pkg</pkg-ref>
+    <choice id="${PACKAGE_ID}.pkg.vst3" visible="true" start_selected="true" title="VST3">
+        <pkg-ref id="${PACKAGE_ID}.pkg.vst3"/>
     </choice>
-    <pkg-ref id="com.CureAudio.${PLUGIN_NAME}.pkg.vst3" version="${VERSION}">${PLUGIN_NAME}_vst3.pkg</pkg-ref>
+    <pkg-ref id="${PACKAGE_ID}.pkg.vst3" version="${VERSION}">${PLUGIN_NAME}_vst3.pkg</pkg-ref>
 </installer-gui-script>
 XMLEND
 
-echo "Running productbuild..."
-
-if [ -n "$DEVELOPER_ID_INSTALLER" ]; then
-    productbuild --distribution ${DIST_DIR}/distribution.xml \
-                 --package-path ${DIST_DIR} \
-                 --resources ${SCRIPT_DIR} \
+if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
+    productbuild --distribution "${DIST_DIR}/distribution.xml" \
+                 --package-path "${DIST_DIR}" \
+                 --resources "${SCRIPT_DIR}" \
                  --sign "${DEVELOPER_ID_INSTALLER}" \
                  "${INSTALLER_PATH}"
 else
-    echo "WARNING: environment variable \"DEVELOPER_ID_INSTALLER\" not found. Building installer without signature..."
-    productbuild --distribution ${DIST_DIR}/distribution.xml \
-                 --package-path ${DIST_DIR} \
-                 --resources ${SCRIPT_DIR} \
+    echo "No Developer ID Installer certificate configured; building unsigned installer."
+    productbuild --distribution "${DIST_DIR}/distribution.xml" \
+                 --package-path "${DIST_DIR}" \
+                 --resources "${SCRIPT_DIR}" \
                  "${INSTALLER_PATH}"
 fi
 
-if [ $? != 0 ]; then
-    echo "Failed productbuild"
-    exit 1
-fi
-
-if [ -n "$DEVELOPER_ID_INSTALLER" ]; then
+if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
     pkgutil --check-signature "${INSTALLER_PATH}"
-    if [ $? != 0 ]; then
-        echo "Failed pkgutil"
-        exit 1
-    fi
 fi
 
-#======================================
-
-# Submit for notorisation
-# NOTE if this fails, try debugging using this
-# xcrun notarytool log {GUID} --apple-id ${APPLE_ID} --team-id ${TEAM_ID} log.json # --password {APP_PASSWORD}
-# https://melatonin.dev/blog/how-to-code-sign-and-notarize-macos-audio-plugins-in-ci/
-if [[ -n "$APPLE_ID" && -n "$TEAM_ID" ]]; then
-    echo "Running notarytool..."
+if [ -n "${APPLE_ID:-}" ] && [ -n "${TEAM_ID:-}" ]; then
     xcrun notarytool submit "${INSTALLER_PATH}" --apple-id "${APPLE_ID}" --team-id "${TEAM_ID}" --wait
-
-    echo "Running stapler..."
     xcrun stapler staple "${INSTALLER_PATH}"
-
-    # verify notorisation
-    echo "Running spctl..."
     spctl --verbose --assess --type install "${INSTALLER_PATH}"
 else
-    echo "WARNING: environment variable \"APPLE_ID\" and/or \"TEAM_ID\" not found. Skipping notorisation..."
+    echo "Apple notarization credentials not configured; skipping notarization."
 fi
 
-echo "Zipping PKG"
-# Empty archive
-zip -d $DIST_DIR/${PLUGIN_NAME}_mac.zip "*"
-# Use flat folder structure
-zip -rj $DIST_DIR/${PLUGIN_NAME}_mac.zip $INSTALLER_PATH
-
-
-echo "Done!"
+echo "Installer: ${INSTALLER_PATH}"
