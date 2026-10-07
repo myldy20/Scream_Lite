@@ -22,8 +22,8 @@
 // See list of categories here: https://steinbergmedia.github.io/vst3_doc/vstinterfaces/group__plugType.html
 #define CPLUG_VST3_CATEGORIES "Fx|Filter"
 
-#define CPLUG_VST3_TUID_COMPONENT  'Cure', 'comp', 'SCRM', 0
-#define CPLUG_VST3_TUID_CONTROLLER 'Cure', 'edit', 'SCRM', 0
+#define CPLUG_VST3_TUID_COMPONENT  'Cure', 'comp', 'SCLT', 1
+#define CPLUG_VST3_TUID_CONTROLLER 'Cure', 'edit', 'SCLT', 1
 
 #define MY_CONCAT_(a, b) a##b
 #define MY_CONCAT(a, b)  MY_CONCAT_(a, b)
@@ -31,8 +31,8 @@
 #define CPLUG_AUV2_VIEW_CLASS MY_CONCAT(PW_PREFIX, UIView)
 #endif
 
-#define CPLUG_CLAP_ID          "com.cureaudio.scream"
-#define CPLUG_CLAP_DESCRIPTION "Scream Filter"
+#define CPLUG_CLAP_ID          "com.myldy20.screamlite"
+#define CPLUG_CLAP_DESCRIPTION "Scream Lite Filter"
 #define CPLUG_CLAP_FEATURES    CLAP_PLUGIN_FEATURE_FILTER
 
 #include <xhl/alloc.h>
