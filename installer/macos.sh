@@ -51,17 +51,6 @@ fi
 #     exit 1
 # fi
 
-echo "Backing up binaries with debug symbols"
-xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}_auv2.dSYM"
-xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}_clap.dSYM"
-xcrun dsymutil "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3/Contents/MacOS/${PLUGIN_NAME}" -o "${DIST_DIR}/${PLUGIN_NAME}_v${VERSION}_vst3.dSYM"
-
-# If this wasn't open source, I would strip the symbols here
-# echo "Stripping symbols"
-# strip -x "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.clap/Contents/MacOS/${PLUGIN_NAME}"
-# strip -x "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.component/Contents/MacOS/${PLUGIN_NAME}"
-# strip -x "${SCRIPT_DIR}/../build/Release/${PLUGIN_NAME}.vst3/Contents/MacOS/${PLUGIN_NAME}"
-
 #======================================
 
 echo "Signing"
