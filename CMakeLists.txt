@@ -5,10 +5,11 @@ set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 project(ScreamLite
     VERSION 1.0.12
     DESCRIPTION ""
-    HOMEPAGE_URL "https://github.com/Cure-Audio/Scream"
+    HOMEPAGE_URL "https://github.com/myldy20/Scream_Lite"
     LANGUAGES C)
 set(COMPANY_NAME "Cure Audio")
 set(PLUGIN_DISPLAY_NAME "Scream Lite")
+option(SCREAM_LITE_BUILD_STANDALONE "Build the standalone test application" OFF)
 
 set(PRODUCT_NAME "${PLUGIN_DISPLAY_NAME}") # used by info.plist
 set(PRODUCT_COPYRIGHT ${COMPANY_NAME})
@@ -186,7 +187,9 @@ elseif(APPLE)
     enable_language(OBJC)
     # if (CMAKE_BUILD_TYPE MATCHES Release)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
-    list(APPEND PLUGIN_OPTIONS -g)
+    if (CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
+        list(APPEND PLUGIN_OPTIONS -g)
+    endif()
     # endif()
 
     list(APPEND PLUGIN_SOURCES
@@ -325,23 +328,25 @@ endif()
 # ███████║   ██║   ██║  ██║██║ ╚████║██████╔╝██║  ██║███████╗╚██████╔╝██║ ╚████║███████╗
 # ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
 
+if (SCREAM_LITE_BUILD_STANDALONE)
 if (WIN32)
-    add_executable(${PROJECT_NAME}_standalone WIN32 ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_win.c)
-    target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES})
-elseif(APPLE)
-    add_executable(${PROJECT_NAME}_standalone MACOSX_BUNDLE ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_osx.m)
-    target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES} "-framework CoreMIDI -framework CoreAudio -framework CoreServices")
-
-    configure_info_plist(${PROJECT_NAME}_standalone ${APP_BUNDLE_ID} "APPL" "app")
-
-    file(TOUCH_NOCREATE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo")
-    file(WRITE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo" "APPL????")
+        add_executable(${PROJECT_NAME}_standalone WIN32 ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_win.c)
+        target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES})
+    elseif(APPLE)
+        add_executable(${PROJECT_NAME}_standalone MACOSX_BUNDLE ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_osx.m)
+        target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES} "-framework CoreMIDI -framework CoreAudio -framework CoreServices")
+    
+        configure_info_plist(${PROJECT_NAME}_standalone ${APP_BUNDLE_ID} "APPL" "app")
+    
+        file(TOUCH_NOCREATE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo")
+        file(WRITE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo" "APPL????")
+    endif()
+    target_include_directories(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_INCLUDE})
+    target_compile_definitions(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_BUILD_STANDALONE)
+    target_compile_options(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_OPTIONS})
+    target_precompile_headers(${PROJECT_NAME}_standalone PRIVATE src/common.h)
+    # add_dependencies(${PROJECT_NAME}_standalone shader_header)
 endif()
-target_include_directories(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_INCLUDE})
-target_compile_definitions(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_BUILD_STANDALONE)
-target_compile_options(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_OPTIONS})
-target_precompile_headers(${PROJECT_NAME}_standalone PRIVATE src/common.h)
-# add_dependencies(${PROJECT_NAME}_standalone shader_header)
 
 # ██╗  ██╗ ██████╗ ████████╗██████╗ ███████╗██╗      ██████╗  █████╗ ██████╗
 # ██║  ██║██╔═══██╗╚══██╔══╝██╔══██╗██╔════╝██║     ██╔═══██╗██╔══██╗██╔══██╗
@@ -351,7 +356,7 @@ target_precompile_headers(${PROJECT_NAME}_standalone PRIVATE src/common.h)
 # ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝
 
 set(HOTRELOAD_LIB_NAME ${PROJECT_NAME}_hotreload_lib)
-if (WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
+if (SCREAM_LITE_BUILD_STANDALONE AND WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
     add_library(${HOTRELOAD_LIB_NAME} MODULE ${PLUGIN_SOURCES})
     target_compile_definitions(${HOTRELOAD_LIB_NAME} PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_SHARED CPLUG_BUILD_STANDALONE)
     target_include_directories(${HOTRELOAD_LIB_NAME} PRIVATE ${PLUGIN_INCLUDE})
