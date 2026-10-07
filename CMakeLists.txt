@@ -2,25 +2,27 @@ cmake_minimum_required(VERSION 3.16)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version" FORCE)
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 
-project(Scream
+project(ScreamLite
     VERSION 1.0.12
     DESCRIPTION ""
-    HOMEPAGE_URL "https://github.com/Cure-Audio/Scream"
+    HOMEPAGE_URL "https://github.com/myldy20/Scream_Lite"
     LANGUAGES C)
 set(COMPANY_NAME "Cure Audio")
+set(PLUGIN_DISPLAY_NAME "Scream Lite")
+option(SCREAM_LITE_BUILD_STANDALONE "Build the standalone test application" OFF)
 
-set(PRODUCT_NAME ${PROJECT_NAME}) # used by info.plist
+set(PRODUCT_NAME "${PLUGIN_DISPLAY_NAME}") # used by info.plist
 set(PRODUCT_COPYRIGHT ${COMPANY_NAME})
-set(AUV2_BUNDLE_ID "com.cureaudio.scream.auv2")
-set(CLAP_BUNDLE_ID "com.cureaudio.scream.clap")
-set(VST3_BUNDLE_ID "com.cureaudio.scream.vst3")
-set(APP_BUNDLE_ID "com.cureaudio.scream.app")
+set(AUV2_BUNDLE_ID "com.myldy20.screamlite.auv2")
+set(CLAP_BUNDLE_ID "com.myldy20.screamlite.clap")
+set(VST3_BUNDLE_ID "com.myldy20.screamlite.vst3")
+set(APP_BUNDLE_ID "com.myldy20.screamlite.app")
 # Full list of AU types & tags here:
 # https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/AudioUnit.html
 # The properties:
 set(MACOSX_BUNDLE_TAGS "<string>Filter</string>") # Predefined tags are: Bass, Delay, Distortion, Drums, Dynamics, Dynamics Processor, Effects, Equalizer, Filter, Format Converter, Guitar, Imaging, MIDI, Mixer, Offline Effect, Output, Panner, Pitch, Reverb, Sampler, Synthesizer, Time Effect, Vocal. But you can use others.
 set(MACOSX_BUNDLE_TYPE "aufx") # "aufx" for Effect, "augn" for Generator, "aumu" for Instrument, "aufm" for Music Effect.
-set(MACOSX_BUNDLE_SUBTYPE "Scrm") # For AU and GarageBand 10.3 compatibility, the first letter must be upper-case, the others lower-case.
+set(MACOSX_BUNDLE_SUBTYPE "Sclt") # For AU and GarageBand 10.3 compatibility, the first letter must be upper-case, the others lower-case.
 set(MACOSX_BUNDLE_MANUFACTURER "Cure") # For AU and GarageBand 10.3 compatibility, the first letter must be upper-case, the others lower-case.
 # Convert version string (1.0.0) > integer (65536)
 math(EXPR MACOSX_BUNDLE_VERSION_INT "${PROJECT_VERSION_MAJOR} << 16 | ${PROJECT_VERSION_MINOR} << 8 | ${PROJECT_VERSION_PATCH}" OUTPUT_FORMAT DECIMAL) # cool trick bro
@@ -36,7 +38,7 @@ else()
     set(CMAKE_C_STANDARD 99)
 endif()
 
-if (CMAKE_BUILD_TYPE MATCHES Release OR CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+if (CMAKE_BUILD_TYPE MATCHES Release OR CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     set(CMAKE_CXX_STANDARD 20)
 else()
     set(CMAKE_CXX_STANDARD 11)
@@ -107,7 +109,7 @@ endif()
 set(PLUGIN_DEFINITIONS
     CPLUG_COMPANY_NAME="${COMPANY_NAME}"
     CPLUG_COMPANY_EMAIL="contact@cure.audio"
-    CPLUG_PLUGIN_NAME="${PROJECT_NAME}"
+    CPLUG_PLUGIN_NAME="${PLUGIN_DISPLAY_NAME}"
     CPLUG_PLUGIN_URI="${PROJECT_HOMEPAGE_URL}"
     CPLUG_PLUGIN_VERSION="${PROJECT_VERSION}"
     _HAS_EXCEPTIONS=0
@@ -130,7 +132,6 @@ set(PLUGIN_SOURCES
     src/resource_manager.c
     src/icons.c
     src/logger.c
-    src/updates.c
 
     src/libs/freetype_scu.c
     src/libs/nanosvgrast3.c
@@ -139,15 +140,11 @@ set(PLUGIN_SOURCES
     src/libs/stb_image_resize2.c
     src/libs/texteditor.c
     src/libs/tooltip.c
-    src/libs/picohttpparser.c
-    src/libs/yyjson.c
-    src/libs/https.c
 
     # modules/wip_libs/src/nanovg2.c
     modules/xvg/xvg.c
     modules/wip_libs/src/imgui.c
     modules/wip_libs/src/linked_arena.c
-    modules/wip_libs/src/xrequest.c
     )
 
 set(PLUGIN_INCLUDE
@@ -169,13 +166,13 @@ if (WIN32)
     list(APPEND PLUGIN_DEFINITIONS UNICODE _UNICODE _USE_MATH_DEFINES PW_DX11)
 
     if (CMAKE_BUILD_TYPE MATCHES Release)
-        if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        if (CMAKE_C_COMPILER_ID STREQUAL "MSVC")
             list(APPEND PLUGIN_OPTIONS /arch:AVX)
         else()
             list(APPEND PLUGIN_OPTIONS -march=corei7-avx)
         endif()
     else()
-        if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        if (CMAKE_C_COMPILER_ID STREQUAL "MSVC")
             list(APPEND PLUGIN_OPTIONS /arch:AVX2)
         else()
             list(APPEND PLUGIN_OPTIONS -march=haswell)
@@ -190,7 +187,9 @@ elseif(APPLE)
     enable_language(OBJC)
     # if (CMAKE_BUILD_TYPE MATCHES Release)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
-    list(APPEND PLUGIN_OPTIONS -g)
+    if (CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
+        list(APPEND PLUGIN_OPTIONS -g)
+    endif()
     # endif()
 
     list(APPEND PLUGIN_SOURCES
@@ -316,7 +315,7 @@ elseif(WIN32)
         )
     target_link_libraries(${PROJECT_NAME}_plugin PRIVATE ${PLUGIN_LIBRARIES})
     target_include_directories(${PROJECT_NAME}_plugin PRIVATE ${PLUGIN_INCLUDE})
-    target_compile_definitions(${PROJECT_NAME}_plugin PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_BUILD_VST3 CPLUG_BUILD_CLAP CPLUG_BUILD_AUV2)
+    target_compile_definitions(${PROJECT_NAME}_plugin PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_BUILD_VST3 CPLUG_BUILD_CLAP)
     target_compile_options(${PROJECT_NAME}_plugin PRIVATE ${PLUGIN_OPTIONS})
     target_precompile_headers(${PROJECT_NAME}_plugin PRIVATE src/common.h)
 endif()
@@ -329,23 +328,25 @@ endif()
 # ███████║   ██║   ██║  ██║██║ ╚████║██████╔╝██║  ██║███████╗╚██████╔╝██║ ╚████║███████╗
 # ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
 
+if (SCREAM_LITE_BUILD_STANDALONE)
 if (WIN32)
-    add_executable(${PROJECT_NAME}_standalone WIN32 ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_win.c)
-    target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES})
-elseif(APPLE)
-    add_executable(${PROJECT_NAME}_standalone MACOSX_BUNDLE ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_osx.m)
-    target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES} "-framework CoreMIDI -framework CoreAudio -framework CoreServices")
-
-    configure_info_plist(${PROJECT_NAME}_standalone ${APP_BUNDLE_ID} "APPL" "app")
-
-    file(TOUCH_NOCREATE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo")
-    file(WRITE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo" "APPL????")
+        add_executable(${PROJECT_NAME}_standalone WIN32 ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_win.c)
+        target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES})
+    elseif(APPLE)
+        add_executable(${PROJECT_NAME}_standalone MACOSX_BUNDLE ${PLUGIN_SOURCES} modules/CPLUG/src/cplug_standalone_osx.m)
+        target_link_libraries(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_LIBRARIES} "-framework CoreMIDI -framework CoreAudio -framework CoreServices")
+    
+        configure_info_plist(${PROJECT_NAME}_standalone ${APP_BUNDLE_ID} "APPL" "app")
+    
+        file(TOUCH_NOCREATE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo")
+        file(WRITE "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${PROJECT_NAME}.app/Contents/PkgInfo" "APPL????")
+    endif()
+    target_include_directories(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_INCLUDE})
+    target_compile_definitions(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_BUILD_STANDALONE)
+    target_compile_options(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_OPTIONS})
+    target_precompile_headers(${PROJECT_NAME}_standalone PRIVATE src/common.h)
+    # add_dependencies(${PROJECT_NAME}_standalone shader_header)
 endif()
-target_include_directories(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_INCLUDE})
-target_compile_definitions(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_BUILD_STANDALONE)
-target_compile_options(${PROJECT_NAME}_standalone PRIVATE ${PLUGIN_OPTIONS})
-target_precompile_headers(${PROJECT_NAME}_standalone PRIVATE src/common.h)
-# add_dependencies(${PROJECT_NAME}_standalone shader_header)
 
 # ██╗  ██╗ ██████╗ ████████╗██████╗ ███████╗██╗      ██████╗  █████╗ ██████╗
 # ██║  ██║██╔═══██╗╚══██╔══╝██╔══██╗██╔════╝██║     ██╔═══██╗██╔══██╗██╔══██╗
@@ -355,7 +356,7 @@ target_precompile_headers(${PROJECT_NAME}_standalone PRIVATE src/common.h)
 # ╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝
 
 set(HOTRELOAD_LIB_NAME ${PROJECT_NAME}_hotreload_lib)
-if (WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
+if (SCREAM_LITE_BUILD_STANDALONE AND WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
     add_library(${HOTRELOAD_LIB_NAME} MODULE ${PLUGIN_SOURCES})
     target_compile_definitions(${HOTRELOAD_LIB_NAME} PRIVATE ${PLUGIN_DEFINITIONS} CPLUG_SHARED CPLUG_BUILD_STANDALONE)
     target_include_directories(${HOTRELOAD_LIB_NAME} PRIVATE ${PLUGIN_INCLUDE})

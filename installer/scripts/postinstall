@@ -1,5 +1,5 @@
 #!/bin/sh
-rsync -r /tmp/Scream-installer/Scream "$HOME/Library/Application Support/Cure Audio"
+rsync -r /tmp/ScreamLite-installer/ScreamLite "$HOME/Library/Application Support/Cure Audio"
 chown -R $USER:staff "$HOME/Library/Application Support/Cure Audio"
 
-rm -rf /tmp/Scream-installer/Scream
+rm -rf /tmp/ScreamLite-installer/ScreamLite

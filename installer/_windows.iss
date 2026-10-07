@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 [Setup]
-#define MyAppName "Scream"
+#define MyAppName "ScreamLite"
 #define MyBusinessName "Cure Audio"
 
 AppName={#MyAppName}

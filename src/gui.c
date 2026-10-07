@@ -5,7 +5,6 @@
 #include "plugin.h"
 
 #include "dsp.h"
-#include "updates.h"
 
 #include <stdint.h>
 #include <xhl/array2.h>
@@ -410,7 +409,7 @@ void* pw_create_gui(void* _plugin, void* _pw)
 #ifdef NDEBUG
         // Requires installer putting assets in correct folder
         int         len             = xfiles_get_user_directory(path, sizeof(path), XFILES_USER_DIRECTORY_APPDATA);
-        const char* relpath_plugin  = XFILES_DIR_STR "Cure Audio" XFILES_DIR_STR "Scream" XFILES_DIR_STR;
+        const char* relpath_plugin  = XFILES_DIR_STR "Cure Audio" XFILES_DIR_STR "ScreamLite" XFILES_DIR_STR;
         len                        += xfmt(path, len, "%s", relpath_plugin);
 #else
         // Load from assets dir
@@ -1409,39 +1408,6 @@ void pw_tick(void* _gui)
         const XVGTextLayout* layout = xvg_create_text_layout(bg, "SCREAM", NULL, 24 * lm->param_scale, 0, 0, 0, false);
         xvg_draw_text_layout(bg, layout, cx, cy, XVG_ALIGN_CC, 0, C_BG_LIGHT);
 
-        // Show evil red dot?
-        // "Notification badge"
-        if (UPDATE_STATUS == UPDATE_STATUS_AVAILABLE && UPDATE_URL[0] != 0)
-        {
-            const XVGTextLayoutRow* rows        = xvg_layout_get_rows(layout);
-            float                   top_delta   = (layout->ascender - rows[0].ymax) / gui->xvg.backingScaleFactor;
-            float                   bot_delta   = (layout->descender - rows[0].ymin) / gui->xvg.backingScaleFactor;
-            float                   text_width  = layout->xmax / gui->xvg.backingScaleFactor;
-            float                   text_height = layout->total_height / gui->xvg.backingScaleFactor;
-            imgui_rect              title_area =
-                {cx - text_width * 0.5f, cy - text_height * 0.5f, cx + text_width * 0.5f, cy + text_height * 0.5f};
-
-            title_area.y += top_delta;
-            title_area.b += bot_delta;
-
-            events = imgui_get_events_rect(im, 'titl', &title_area);
-            tooltip_handle_events(
-                &gui->tooltip,
-                title_area,
-                "A new update is available",
-                gui->frame_start_time,
-                events);
-
-            // Text always appears over text unless we issue a new batch draw
-            xvg_command_batch_draw(bg, "Evil red dot");
-            // Now we begin a new layer
-
-            xvg_draw_circle(bg, title_area.r, title_area.y, 6, 0, 0xDE3030FF);
-            if (events & IMGUI_EVENT_MOUSE_ENTER)
-                pw_set_mouse_cursor(gui->pw, PW_CURSOR_HAND_POINT);
-            if (events & IMGUI_EVENT_MOUSE_LEFT_DOWN)
-                open_hyperlink(UPDATE_URL);
-        }
         xvg_release_text_layout(bg, layout);
 
         // Output gain

@@ -1,6 +1,6 @@
 @ECHO OFF
 
-SET PLUGIN_NAME=Scream
+SET PLUGIN_NAME=ScreamLite
 SET DIST_DIR=%0\..\..\dist
 
 IF NOT EXIST %DIST_DIR% (

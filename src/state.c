@@ -1,5 +1,6 @@
 #include "gui.h"
 #include "plugin.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <xhl/maths.h>
@@ -94,6 +95,54 @@ plugin_version parse_plugin_version(const char* version_string)
 }
 
 plugin_version get_plugin_version() { return parse_plugin_version(CPLUG_PLUGIN_VERSION); }
+
+enum
+{
+    MAX_STATE_SIZE = 4 * 1024 * 1024,
+};
+
+static bool state_blob_is_valid(const PluginState* state, size_t state_size)
+{
+    const size_t blob_base = offsetof(PluginState, blob);
+    if (state_size < blob_base || state->blob_length > state_size - blob_base)
+        return false;
+
+    for (int lfo_idx = 0; lfo_idx < ARRLEN(state->lfos); ++lfo_idx)
+    {
+        for (int pattern_idx = 0; pattern_idx < ARRLEN(state->lfos[lfo_idx].patterns); ++pattern_idx)
+        {
+            const LFOPointArrayHeaderv0_2_4* h = &state->lfos[lfo_idx].patterns[pattern_idx];
+            if (h->array_length < 0 || h->blob_offset < 0)
+                return false;
+
+            const size_t npoints = (size_t)h->array_length;
+            const size_t offset  = (size_t)h->blob_offset;
+            if (npoints == 0 || offset > state->blob_length)
+                return false;
+
+            const size_t bytes_left = state->blob_length - offset;
+            if (npoints > bytes_left / sizeof(xvec3f))
+                return false;
+
+            const xvec3f* points = (const xvec3f*)(state->blob + offset);
+            float         last_x = 0;
+            for (size_t point_idx = 0; point_idx < npoints; ++point_idx)
+            {
+                const xvec3f point = points[point_idx];
+                if (!isfinite(point.x) || !isfinite(point.y) || !isfinite(point.skew))
+                    return false;
+                if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1 || point.skew < 0 || point.skew > 1)
+                    return false;
+                if (point_idx == 0 && point.x != 0)
+                    return false;
+                if (point_idx > 0 && point.x < last_x)
+                    return false;
+                last_x = point.x;
+            }
+        }
+    }
+    return true;
+}
 
 // [main thread]
 void cplug_saveState(void* _p, const void* stateCtx, cplug_writeProc writeProc)
@@ -192,6 +241,9 @@ void state_update_params(Plugin* p, double* state_params, size_t num_params)
         else
             v = cplug_getDefaultParameterValue(p, i);
 
+        if (!isfinite(v))
+            v = cplug_getDefaultParameterValue(p, i);
+
         double  vmin     = 0;
         double  vmax     = 1;
         ParamID param_id = cplug_getParameterID(p, i);
@@ -220,27 +272,40 @@ void cplug_loadState(void* _p, const void* stateCtx, cplug_readProc readProc)
     p->main_params[PARAM_OUTPUT_GAIN]  = 1;
     p->audio_params[PARAM_OUTPUT_GAIN] = 1;
 
-    if (ret != 0 && ret != sizeof(header))
+    if (ret != sizeof(header))
     {
-        log_error("Error: Unexpected state version. Ret %lld", ret);
+        log_error("Error: Could not read state header. Ret %lld", ret);
+        return;
     }
-    else
+
     {
         static const plugin_version v0_0_3 = {.patch = 3};
         static const plugin_version v0_2_4 = {.minor = 2, .patch = 4};
         static const plugin_version v0_3_0 = {.minor = 3};
+
+        if (header.version.u32 > get_plugin_version().u32)
+        {
+            log_error("Error: State was created by a newer plugin version");
+            return;
+        }
         if (header.version.u32 < v0_0_3.u32)
         {
             PluginStatev0_0_1 state;
-            readProc(stateCtx, &state, sizeof(state));
-
+            if (header.size != sizeof(state) || readProc(stateCtx, &state, sizeof(state)) != sizeof(state))
+            {
+                log_error("Error: Invalid legacy state");
+                return;
+            }
             state_update_params(p, state.params, ARRLEN(state.params));
         }
         else if (header.version.u32 == v0_0_3.u32)
         {
             PluginStatev0_0_3 state;
-            xassert(header.size == sizeof(state));
-            readProc(stateCtx, &state, sizeof(state));
+            if (header.size != sizeof(state) || readProc(stateCtx, &state, sizeof(state)) != sizeof(state))
+            {
+                log_error("Error: Invalid v0.0.3 state");
+                return;
+            }
             state_update_params(p, state.params, ARRLEN(state.params));
         }
 
@@ -277,13 +342,18 @@ void cplug_loadState(void* _p, const void* stateCtx, cplug_readProc readProc)
         }
         else // if (header.version.u32 >= v0_2_4.u32)
         {
-            PluginState* state = xmalloc(header.size);
-
-            int64_t bytes_read = readProc(stateCtx, state, header.size);
-
-            if (bytes_read != header.size)
+            if (header.size < sizeof(PluginState) || header.size > MAX_STATE_SIZE)
             {
-                // TODO: log error
+                log_error("Error: Invalid state size: %u", header.size);
+                return;
+            }
+
+            PluginState* state = xmalloc(header.size);
+            int64_t      bytes_read = readProc(stateCtx, state, header.size);
+
+            if (bytes_read != header.size || !state_blob_is_valid(state, header.size))
+            {
+                log_error("Error: Corrupt or incomplete plugin state");
             }
             else
             {
@@ -314,12 +384,23 @@ void cplug_loadState(void* _p, const void* stateCtx, cplug_readProc readProc)
                 _Static_assert(sizeof(state->lfo_mod_amounts) == sizeof(p->lfo_mod_amounts), "");
                 _Static_assert(ARRLEN(state->lfo_mod_amounts) == ARRLEN(p->lfo_mod_amounts), "");
                 memcpy(p->lfo_mod_amounts, state->lfo_mod_amounts, sizeof(p->lfo_mod_amounts));
+                for (int mod_idx = 0; mod_idx < ARRLEN(p->lfo_mod_amounts); ++mod_idx)
+                {
+                    for (int ch = 0; ch < 2; ++ch)
+                    {
+                        if (!isfinite(p->lfo_mod_amounts[mod_idx].data[ch]))
+                            p->lfo_mod_amounts[mod_idx].data[ch] = 0;
+                    }
+                }
 
-                p->autogain_on         = state->autogain_on;
-                p->midi_keytracking_on = state->midi_keytracking_on;
-                p->lfo_loop_type[0]    = state->lfo_loop_type[0];
-                p->lfo_loop_type[1]    = state->lfo_loop_type[1];
-                p->selected_lfo_idx    = state->selected_lfo_idx;
+                p->autogain_on         = !!state->autogain_on;
+                p->midi_keytracking_on = !!state->midi_keytracking_on;
+                p->lfo_loop_type[0] =
+                    state->lfo_loop_type[0] < NUM_LOOP_TYPES ? state->lfo_loop_type[0] : LFO_RETRIG;
+                p->lfo_loop_type[1] =
+                    state->lfo_loop_type[1] < NUM_LOOP_TYPES ? state->lfo_loop_type[1] : LFO_RETRIG;
+                p->selected_lfo_idx =
+                    state->selected_lfo_idx < ARRLEN(p->lfos) ? state->selected_lfo_idx : 0;
 
                 // spare array
                 xvec3f* dst_points = NULL;
@@ -332,6 +413,11 @@ void cplug_loadState(void* _p, const void* stateCtx, cplug_readProc readProc)
                     _Static_assert(sizeof(lfo->grid_y) == sizeof(state->lfos[lfo_idx].grid_y), "");
                     memcpy(lfo->grid_x, state->lfos[lfo_idx].grid_x, sizeof(lfo->grid_x));
                     memcpy(lfo->grid_y, state->lfos[lfo_idx].grid_y, sizeof(lfo->grid_y));
+                    for (int grid_idx = 0; grid_idx < ARRLEN(lfo->grid_x); ++grid_idx)
+                    {
+                        lfo->grid_x[grid_idx] = xm_clampi(lfo->grid_x[grid_idx], 1, 32);
+                        lfo->grid_y[grid_idx] = xm_clampi(lfo->grid_y[grid_idx], 1, 32);
+                    }
 
                     for (int pattern_idx = 0; pattern_idx < ARRLEN(state->lfos[lfo_idx].patterns); pattern_idx++)
                     {
@@ -343,8 +429,8 @@ void cplug_loadState(void* _p, const void* stateCtx, cplug_readProc readProc)
                         xarr_setlen(dst_points, src_npoints);
 
                         size_t num_bytes = sizeof(*dst_points) * src_npoints;
-                        xassert(arrheader->blob_offset + num_bytes <= state->blob_length);
-
+                        // state_blob_is_valid() has already checked the offset and
+                        // multiplication bounds before any destination allocation.
                         memcpy(dst_points, src_points, num_bytes);
 
                         // !!! Audio is still running when running cplug_loadState()
