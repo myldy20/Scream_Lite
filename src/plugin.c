@@ -520,17 +520,19 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
                 PEAK_FREQUENCY_MASK    = PEAK_FREQUENCY_SAMPLES - 1,
             };
             int remaining_samples = num_frames;
+            int sample_offset     = 0;
             while (remaining_samples)
             {
                 float peak_input = p->_gui_input_last_peak.data[ch];
                 int   N          = xm_mini(remaining_samples, PEAK_FREQUENCY_SAMPLES - p->_gui_input_read_count[ch]);
                 for (int i = 0; i < N; i++)
                 {
-                    float x = fabsf(audio[i]);
+                    float x = fabsf(audio[sample_offset + i]);
                     if (x > peak_input)
                         peak_input = x;
                 }
                 remaining_samples            -= N;
+                sample_offset                += N;
                 p->_gui_input_read_count[ch] += N;
                 if (p->_gui_input_read_count[ch] == PEAK_FREQUENCY_SAMPLES)
                 {
