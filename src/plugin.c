@@ -2,7 +2,6 @@
 
 #include "dsp.h"
 #include "plugin.h"
-#include "updates.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -89,16 +88,13 @@ void* cplug_createPlugin(CplugHostContext* ctx)
 {
     g_is_main_thread = true;
     library_load_platform();
-    updates_init();
-
     struct Plugin* p                   = NULL;
-    size_t         expected_max_memory = sizeof(*p);
-
-    // For audio
-    // max block size * max sample rate * num LFOs
-    expected_max_memory += sizeof(float) * 2048 * 9600 * 2;
-    // just to be safe
-    expected_max_memory += 1024 * 1024; // 1mb
+    // The arena is scratch storage for the plugin state, LFO point snapshots and
+    // up to two per-block modulation buffers. The previous formula reserved
+    // roughly 150 MiB per instance despite only needing a few MiB in practice.
+    // Keep enough headroom for unusually large host blocks without bloating
+    // every plugin instance.
+    size_t expected_max_memory = sizeof(*p) + 4 * 1024 * 1024;
 
     LinkedArena* arena = linked_arena_create(expected_max_memory);
     p                  = linked_arena_alloc(arena, sizeof(*p));
@@ -176,8 +172,6 @@ void* cplug_createPlugin(CplugHostContext* ctx)
 void cplug_destroyPlugin(void* _p)
 {
     CPLUG_LOG_ASSERT(_p != NULL);
-
-    updates_deinit();
 
     Plugin* p = _p;
     for (int i = 0; i < ARRLEN(p->lfos); i++)
@@ -405,7 +399,11 @@ void render_lfo(Plugin* p, float* buffer, int num_samples, int lfo_idx)
 void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
 {
     xassert(num_frames > 0);
-    const float fs_inv = 1.0f / p->sample_rate;
+    const float fs_inv        = 1.0f / p->sample_rate;
+    // calcG() uses an approximation with a pole near Nyquist. Keep filter
+    // cutoffs below it for low sample-rate sessions while preserving the
+    // original 20 kHz range at 44.1 kHz and above.
+    const float max_filter_hz = xm_minf(20000.0f, 0.47f * (float)p->sample_rate);
 
     float keytracking_offset = 0;
     bool  keytracking_on     = p->midi_keytracking_on && p->keytracking_last_midi_note != -1;
@@ -431,13 +429,13 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
     float* mod_buffer_2    = NULL;
     if (lfo_1_mod_flags)
     {
-        mod_buffer_1 = linked_arena_alloc(p->audio_arena, num_frames * sizeof(mod_buffer_1));
+        mod_buffer_1 = linked_arena_alloc(p->audio_arena, num_frames * sizeof(*mod_buffer_1));
         render_lfo(p, mod_buffer_1, num_frames, 0);
         last_lfo_amount.left = mod_buffer_1[num_frames - 1];
     }
     if (lfo_2_mod_flags)
     {
-        mod_buffer_2 = linked_arena_alloc(p->audio_arena, num_frames * sizeof(mod_buffer_2));
+        mod_buffer_2 = linked_arena_alloc(p->audio_arena, num_frames * sizeof(*mod_buffer_2));
         render_lfo(p, mod_buffer_2, num_frames, 1);
         last_lfo_amount.right = mod_buffer_2[num_frames - 1];
     }
@@ -496,8 +494,8 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
 
         lp_cutoff = xm_midi_to_Hz(lp_cutoff);
         hp_cutoff = xm_midi_to_Hz(hp_cutoff);
-        lp_cutoff = xm_clampf(lp_cutoff, 5, 20000);
-        hp_cutoff = xm_clampf(hp_cutoff, 5, 20000);
+        lp_cutoff = xm_clampf(lp_cutoff, 5, max_filter_hz);
+        hp_cutoff = xm_clampf(hp_cutoff, 5, max_filter_hz);
 
         float feedback_gain = xm_lerpf(resonance, FB_GAIN_MIN, FB_GAIN_MAX);
         feedback_gain       = xm_fast_dB_to_gain(feedback_gain);
@@ -585,8 +583,8 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
 
                 lp_cutoff = xm_midi_to_Hz(lp_cutoff);
                 hp_cutoff = xm_midi_to_Hz(hp_cutoff);
-                lp_cutoff = xm_clampf(lp_cutoff, 20, 20000);
-                hp_cutoff = xm_clampf(hp_cutoff, 20, 20000);
+                lp_cutoff = xm_clampf(lp_cutoff, 20, max_filter_hz);
+                hp_cutoff = xm_clampf(hp_cutoff, 20, max_filter_hz);
 
                 feedback_gain = xm_lerpf(resonance, FB_GAIN_MIN, FB_GAIN_MAX);
                 feedback_gain = xm_fast_dB_to_gain(feedback_gain);
@@ -607,7 +605,10 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
             // float y = x + s.fb_yn_1;
             float y = x + s.fb_yn_1;
 
-            // y = tanhf(y);
+            // The ADAA antiderivative uses exp/cosh and can overflow for
+            // pathological hot inputs. tanh() is already effectively fully
+            // saturated here, so clamping only removes undefined behaviour.
+            y = xm_clampf(y, -20.0f, 20.0f);
             y = Tanh_ADAA2_process(&s.tanh_1, y);
             // y = sinarctan2(y);
             // y = softsine(y);
@@ -629,8 +630,7 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
 
             // feed = sinarctan(feed);
             feed = filter_process(feed, &hp_c, s.hp);
-            // feed = xm_clampf(feed, -1, 1);
-            // feed = tanhf(feed);
+            feed = xm_clampf(feed, -20.0f, 20.0f);
             feed = Tanh_ADAA2_process(&s.tanh_2, feed);
             // feed = softsine(feed);
             // feed = softsine2(feed);
@@ -664,9 +664,9 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
     }
 
     // Wrap beat position
-    p->beat_position += num_frames * p->beat_inc;
-    if (p->beat_position >= MAX_PATTERN_LENGTH_PATTERNS)
-        p->beat_position -= MAX_PATTERN_LENGTH_PATTERNS;
+    p->beat_position = fmod(p->beat_position + num_frames * p->beat_inc, MAX_PATTERN_LENGTH_PATTERNS);
+    if (p->beat_position < 0)
+        p->beat_position += MAX_PATTERN_LENGTH_PATTERNS;
     xassert(p->beat_position >= 0 && p->beat_position < MAX_PATTERN_LENGTH_PATTERNS);
 
     if (mod_buffer_2)
@@ -677,7 +677,11 @@ void process_audio(Plugin* p, float** output, int start_sample, int num_frames)
 
 void handle_midi(Plugin* p, const CplugEvent* e)
 {
-    if (e->midi.status == 128) // note off, channel 0
+    const uint8_t status   = e->midi.status & 0xF0;
+    const bool    note_on  = status == 0x90 && e->midi.data2 != 0;
+    const bool    note_off = status == 0x80 || (status == 0x90 && e->midi.data2 == 0);
+
+    if (note_off)
     {
         // if (p->keytracking_last_midi_note == e->.data1)
         //     p->keytracking_last_midi_note = -1;
@@ -686,7 +690,7 @@ void handle_midi(Plugin* p, const CplugEvent* e)
         synth_note_off(&g_synth, e->midi.data1);
 #endif
     }
-    else if (e->midi.status == 144) // note on, channel 0
+    else if (note_on)
     {
         p->keytracking_last_midi_note = e->midi.data1;
 
@@ -830,7 +834,11 @@ void cplug_process(void* _p, CplugProcessContext* ctx)
         next_playhead_beats = ctx->playheadBeats;
 
     if (has_playhead && is_playing)
+    {
         p->beat_position = fmod(ctx->playheadBeats, MAX_PATTERN_LENGTH_PATTERNS);
+        if (p->beat_position < 0)
+            p->beat_position += MAX_PATTERN_LENGTH_PATTERNS;
+    }
 
     if (is_looping && has_playhead)
         did_loop = next_playhead_beats < p->last_playhead_beats;
@@ -967,7 +975,7 @@ void cplug_process(void* _p, CplugProcessContext* ctx)
                 int          i;
                 for (i = 0; i < remaining_samples; i++)
                 {
-                    float       avg_gain  = 0.5 * (audio_L[i] + audio_R[i]);
+                    float       avg_gain  = 0.5f * (fabsf(audio_L[i]) + fabsf(audio_R[i]));
                     const float prev_peak = p->retrig_detection;
                     const float next_peak = detect_peak(avg_gain, p->retrig_detection, pd_attack_time, pd_release_time);
                     p->retrig_detection   = next_peak;
